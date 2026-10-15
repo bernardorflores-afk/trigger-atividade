@@ -1,0 +1,55 @@
+CREATE TABLE clientes (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL,
+    total_compras NUMERIC(10, 2) DEFAULT 0.00
+);
+
+CREATE TABLE pedidos (
+    id SERIAL PRIMARY KEY,
+    cliente_id INT NOT NULL,
+    valor_total NUMERIC(10, 2) NOT NULL,
+    data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_cliente FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE
+);
+
+CREATE OR REPLACE FUNCTION fn_atualiza_total_cliente()
+RETURNS TRIGGER AS $$
+declare
+ v_cliente_id int; 
+ begin
+  if(tg_op = 'delete') then
+  v_cliente_id := old.cliente_id; 
+  else
+   v_cliente_id := new.cliente_id;
+   end if;
+   update clientes
+   set total_compras = coalesce((
+ select sum(valor_total) 
+ from pedidos 
+ where cliente_id = v_cliente_id 
+   ), 0.00) 
+   where id = v_cliente_id;
+
+   if (TG_OP = 'UPDATE' and old.client_id is distinct from new.cliente_id) then
+   update clientes 
+   set total_compras = coalesce((
+ select sum(valor_total)
+ from pedidos
+ where cliente_id = old.cliente_id
+ ),0.00)
+ where id = old.cliente_id;
+ end if;
+ return null;
+ end;
+$$ language plpgsql;
+
+create trigger trg_atualiza_total_pedidos 
+after insert or update or delete on pedidos
+for each row
+execute function fn_atualiza_total_cliente()
+
+INSERT INTO clientes (nome) VALUES ('Paulo Antunes'), ('Ana Souza');
+
+SELECT * FROM clientes;
+
+INSERT INTO pedidos (cliente_id, valor_total) VALUES (1, 150.00);
